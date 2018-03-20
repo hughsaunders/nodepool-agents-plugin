@@ -24,7 +24,6 @@
 package com.rackspace.jenkins_nodepool;
 
 import com.github.dockerjava.api.DockerClient;
-import com.github.dockerjava.api.command.AttachContainerCmd;
 import com.github.dockerjava.api.command.CreateContainerResponse;
 import com.github.dockerjava.api.command.DockerCmdExecFactory;
 import com.github.dockerjava.api.command.ExecCreateCmdResponse;
@@ -54,7 +53,6 @@ import org.apache.curator.retry.ExponentialBackoffRetry;
 import org.junit.rules.TestRule;
 import org.junit.runner.Description;
 import org.junit.runners.model.Statement;
-import org.slf4j.LoggerFactory;
 
 /**
  *
@@ -90,6 +88,7 @@ public class NodePoolRule implements TestRule {
     private DockerClient docker;
     private CuratorFramework conn;
     private Map<String, CreateContainerResponse> containers;
+    private String connectionString = "";
 
     public NodePoolRule() {
         this("unix:///var/run/docker.sock");
@@ -120,7 +119,7 @@ public class NodePoolRule implements TestRule {
 //                        builder.env(
 //                                "ZKPORT=" + zkPort.toString()
 //                        );
-//                    }).ports("9999") // ImmutableDockerConfig requires ports, but this port isn't used. 
+//                    }).ports("9999") // ImmutableDockerConfig requires ports, but this port isn't used.
 //                    .build());
 //        }
 //    }
@@ -152,6 +151,10 @@ public class NodePoolRule implements TestRule {
 
     public CuratorFramework getCuratorConnection() {
         return conn;
+    }
+
+    public String getConnectionString() {
+        return connectionString;
     }
 
     public DockerClient getDockerClient() {
@@ -222,7 +225,7 @@ public class NodePoolRule implements TestRule {
                 String npName = containerName("NP");
                 String zkName = containerName("ZK");
 
-                // add random int to names to allow parallel running. 
+                // add random int to names to allow parallel running.
                 List<String> zkEnv = new ArrayList();
                 List<String> npEnv = new ArrayList();
                 List<String> nodepoolLinks = new ArrayList();
@@ -273,9 +276,9 @@ public class NodePoolRule implements TestRule {
                 if (zkClientHostPort == null) {
                     throw new IllegalStateException("Failed to find the zookeeper port on the docker host");
                 }
+                connectionString = MessageFormat.format("127.0.0.1:{0}", zkClientHostPort);
                 conn = CuratorFrameworkFactory.builder()
-                        .connectString("127.0.0.1"
-                                + ":" + zkClientHostPort)
+                        .connectString(connectionString)
                         .namespace("nodepool")
                         .retryPolicy(new ExponentialBackoffRetry(1000, 3))
                         .build();
