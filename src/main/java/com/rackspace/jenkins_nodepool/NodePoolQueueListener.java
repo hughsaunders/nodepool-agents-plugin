@@ -30,6 +30,7 @@ import hudson.model.Queue;
 import hudson.model.queue.QueueListener;
 import java.util.logging.Level;
 import java.util.logging.Logger;
+import jenkins.model.Jenkins;
 
 //TODO: Scan build queue on startup for pipelines that persist across restarts as the
 // queue entry event won't refire.
@@ -44,14 +45,19 @@ public class NodePoolQueueListener extends QueueListener {
     @Override
     public void onEnterWaiting(Queue.WaitingItem wi) {
         final Label label = wi.getAssignedLabel();
-        LOG.log(Level.FINE, "NodePoolQueueListener received queue notification for label {0}.", new Object[]{label});
-
-        if (label == null) {
-            return;
-        }
-
+        LOG.log(Level.FINE, "NodePoolQueueListener received queue notification for label {0}.", label);
         Computer.threadPoolForRemoting.submit(() -> {
             try {
+                // Jenkins node objects persist, but NodePool nodes do not.
+                // if Jenkins is restarted while a NodePool node is being used
+                // by a pipeline, Jenkins will attempt to connect to that node
+                // on restart. Jenkins will supply the full name (eg ${nodepool-prefix}${label}-{id})
+                // Theres no point in attempting to recreate the same node or
+                // resume the build, so we intercept such requests and kill the
+                // job that caused them.
+                if (nodePools.matchesNodePoolComputer(label)) {
+                    Jenkins.getInstance().getQueue().cancel(wi.task);
+                }
                 nodePools.provisionNode(label, wi.task);
             } catch (Exception ex) {
                 LOG.log(Level.SEVERE, null, ex);

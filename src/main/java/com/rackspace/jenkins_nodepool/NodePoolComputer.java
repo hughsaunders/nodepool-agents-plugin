@@ -23,11 +23,15 @@
  */
 package com.rackspace.jenkins_nodepool;
 
+import hudson.model.Computer;
+import hudson.model.Executor;
+import hudson.model.Queue;
 import hudson.model.Slave;
 import hudson.slaves.SlaveComputer;
 import java.io.IOException;
 import java.util.logging.Level;
 import java.util.logging.Logger;
+import javax.servlet.ServletException;
 import org.kohsuke.stapler.HttpResponse;
 
 /**
@@ -52,7 +56,66 @@ public class NodePoolComputer extends SlaveComputer {
         setNodePoolNode(npn);
     }
 
+    @Override
+    public void taskAccepted(Executor executor, Queue.Task task) {
+        super.taskAccepted(executor, task);
+        NodePoolComputer c = (NodePoolComputer) executor.getOwner();
+        LOG.log(Level.FINE, "Starting task {0} on NodePoolComputer {1}", new Object[]{task.getFullDisplayName(), c});
+    }
+
+    @Override
+    public void taskCompleted(Executor executor, Queue.Task task, long durationMS) {
+        super.taskAccepted(executor, task);
+        LOG.log(Level.FINE, "Task " + task.getFullDisplayName() + " completed normally");
+        deleteNodePoolComputer(executor, task);
+    }
+
+    @Override
+    public void taskCompletedWithProblems(Executor executor, Queue.Task task, long durationMS, Throwable problems) {
+        super.taskCompletedWithProblems(executor, task, durationMS, problems);
+        LOG.log(Level.FINE, "Task " + task.getFullDisplayName() + " completed with problems", problems);
+        deleteNodePoolComputer(executor, task);
+    }
+
+    private void deleteNodePoolComputer(Executor executor, Queue.Task task) {
+        try {
+            // When an executor finishes a task, there is a race between
+            // the scheduler reusing it and this listener killing the computer.
+            // In order to give ourselves the best chance in this race,
+            // the computer is marked as offline in the listener thread
+            // before the deleter thread is kicked off to actually go and
+            // talk to nodepool to release the node.
+            final NodePoolComputer c = (NodePoolComputer) executor.getOwner();
+            c.doToggleOffline("Disconnecting");
+            LOG.log(Level.INFO, "Deleting NodePoolNode {0} after task {1}", new Object[]{c, task.getFullDisplayName()});
+
+            Computer.threadPoolForRemoting.submit(() -> {
+                try {
+                    c.doDoDelete();
+                } catch (IOException ex) {
+                    LOG.log(Level.SEVERE, null, ex);
+                }
+            });
+        } catch (IOException | ServletException ex) {
+            LOG.log(Level.SEVERE, null, ex);
+        }
+    }
+
     public final void setNodePoolNode(NodePoolNode npn) {
+        if (npn == null) {
+            LOG.log(Level.WARNING,
+                    "Attempting to set null nodepoolnode for computer: {0}",
+                    this);
+        }
+        try {
+            if (!npn.exists()) {
+                LOG.log(Level.WARNING,
+                        "Attempting to use a non-existent nodepoolnode for computer: {0}",
+                        this);
+            }
+        } catch (Exception ex) {
+            LOG.log(Level.WARNING, "Failed to check if node exists: {0} {1}", new Object[]{nodePoolNode, ex});
+        }
         this.nodePoolNode = npn;
     }
 

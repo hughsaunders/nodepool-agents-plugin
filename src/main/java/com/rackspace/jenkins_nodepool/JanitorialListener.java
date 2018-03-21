@@ -49,11 +49,9 @@ public class JanitorialListener extends ComputerListener {
             }
         }
     }
-
 }
 
 class Janitor implements Runnable {
-
     private static final Logger LOGGER = Logger.getLogger(JanitorialListener.class.getName());
     private static final String SLEEP_SECS_DEFAULT = "60";
 

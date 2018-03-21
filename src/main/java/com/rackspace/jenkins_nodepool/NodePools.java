@@ -28,12 +28,14 @@ import hudson.model.FreeStyleProject;
 import hudson.model.Label;
 import hudson.model.Queue;
 import hudson.model.Queue.Task;
+import java.text.MessageFormat;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Iterator;
 import java.util.List;
 import java.util.logging.Level;
 import java.util.logging.Logger;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 import jenkins.model.GlobalConfiguration;
@@ -46,6 +48,7 @@ import org.kohsuke.stapler.StaplerRequest;
 public class NodePools extends GlobalConfiguration implements Iterable<NodePool> {
 
     private static final Logger LOG = Logger.getLogger(NodePools.class.getName());
+
     public static NodePools get() {
         return GlobalConfiguration.all().get(NodePools.class);
     }
@@ -84,25 +87,48 @@ public class NodePools extends GlobalConfiguration implements Iterable<NodePool>
     public Iterator<NodePool> iterator() {
         return nodePools.iterator();
     }
+
     public List<NodePool> nodePoolsForLabel(Label label) {
         return stream()
-                .filter((NodePool np) -> label.getName().startsWith(np.getLabelPrefix()))
+                .filter((NodePool np) -> np.canProvision(label))
                 .collect(Collectors.toList());
     }
 
     public void provisionNode(Label label, Task task) {
-        for (NodePool np : nodePoolsForLabel(label)) {
+        List<NodePool> nps = nodePoolsForLabel(label);
+        for (NodePool np : nps) {
             try {
                 np.provisionNode(label, task);
                 break;
             } catch (Exception ex) {
                 LOG.log(Level.SEVERE, null, ex);
             }
-        };
+        }
+        if (nps.isEmpty()) {
+
+        }
     }
 
-    // scan queue for builds waiting for instance.
-    // TODO: call this on startup
+    public Boolean matchesNodePoolComputer(Label label) {
+        String prefixes = stream()
+                .map(NodePool::getLabelPrefix)
+                .collect(Collectors.joining("|"));
+        Pattern p = Pattern.compile(MessageFormat.format("({0})-\\w+-[0-9]+", prefixes));
+        return p.matcher(label.getName()).matches();
+
+    }
+
+    public void cleanupAfterRestart() {
+
+    }
+
+    public List<String> prefixList() {
+        return stream()
+                .map(NodePool::getLabelPrefix)
+                .collect(Collectors.toList());
+    }
+ // scan queue for builds waiting for instance.
+// TODO: call this on startup
     public void scanQueue() {
 
         List<NodeRequest> activeRequests = nodePools.stream()

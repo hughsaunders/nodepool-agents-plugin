@@ -28,8 +28,10 @@ import hudson.model.Descriptor;
 import hudson.model.Slave;
 import hudson.plugins.sshslaves.SSHLauncher;
 import hudson.plugins.sshslaves.verifiers.ManuallyProvidedKeyVerificationStrategy;
+import hudson.slaves.RetentionStrategy;
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.logging.Logger;
 
 /**
  *
@@ -37,7 +39,8 @@ import java.util.ArrayList;
  */
 public class NodePoolSlave extends Slave {
 
-    private transient final NodePoolNode nodePoolNode;
+    private static final Logger LOG = Logger.getLogger(NodePoolSlave.class.getName());
+    private final NodePoolNode nodePoolNode;
 
     public NodePoolSlave(NodePoolNode nodePoolNode, String credentialsId) throws Descriptor.FormException, IOException {
 
@@ -61,17 +64,11 @@ public class NodePoolSlave extends Slave {
                         30, //maxNumRetries
                         10, //retryWaitTime
                         new ManuallyProvidedKeyVerificationStrategy(nodePoolNode.getHostKey())
-                //new NonVerifyingKeyVerificationStrategy()
-                //TODO: go back to verifying host key strategy
                 ),
-                new SingleUseRetentionStrategy(),
+                new RetentionStrategy.Always(),
                 new ArrayList() //nodeProperties
         );
         this.nodePoolNode = nodePoolNode;
-    }
-
-    public NodePoolNode getNodePoolNode() {
-        return nodePoolNode;
     }
 
     @Override
@@ -79,6 +76,10 @@ public class NodePoolSlave extends Slave {
         NodePoolComputer npc = new NodePoolComputer(this, nodePoolNode);
         nodePoolNode.setComputer(npc);
         return npc;
+    }
+
+    public NodePoolNode getNodePoolNode() {
+        return nodePoolNode;
     }
 
 }

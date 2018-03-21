@@ -24,6 +24,7 @@
 package com.rackspace.jenkins_nodepool;
 
 import com.google.gson.Gson;
+import java.io.Serializable;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.logging.Level;
@@ -35,7 +36,7 @@ import java.util.logging.Logger;
  *
  * @author Rackspace
  */
-public abstract class ZooKeeperObject {
+public abstract class ZooKeeperObject implements Serializable {
     private static final Logger LOG = Logger.getLogger(ZooKeeperObject.class.getName());
     static final Gson GSON = new Gson();
 

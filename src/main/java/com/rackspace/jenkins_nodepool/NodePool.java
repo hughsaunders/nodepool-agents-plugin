@@ -44,6 +44,7 @@ import hudson.util.FormFieldValidator;
 import hudson.util.FormValidation;
 import hudson.util.ListBoxModel;
 import java.io.IOException;
+import java.io.Serializable;
 import java.nio.charset.Charset;
 import java.text.MessageFormat;
 import java.util.ArrayList;
@@ -54,6 +55,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.logging.Level;
 import java.util.logging.Logger;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 import javax.servlet.ServletException;
 import jenkins.model.Jenkins;
@@ -68,8 +70,9 @@ import org.kohsuke.stapler.QueryParameter;
 import org.kohsuke.stapler.StaplerRequest;
 import org.kohsuke.stapler.StaplerResponse;
 
-public class NodePool implements Describable<NodePool> {
+public class NodePool implements Describable<NodePool>, Serializable {
 
+    private static final Pattern labelPrefixPattern = Pattern.compile("\\w+-");
     private static final Logger LOG = Logger.getLogger(NodePool.class.getName());
 
     static CuratorFramework createZKConnection(String connectionString,
@@ -114,7 +117,7 @@ public class NodePool implements Describable<NodePool> {
     }
 
     // Called for deserialisation
-    private void readObject(java.io.ObjectInputStream in)
+    public void readObject(java.io.ObjectInputStream in)
             throws IOException, ClassNotFoundException {
         in.defaultReadObject(); // call default deserializer
         initTransients();
@@ -311,7 +314,7 @@ public class NodePool implements Describable<NodePool> {
             computers = new ArrayList();
         }
         if (conn == null) {
-            conn = createZKConnection(connectionString, nodeRoot);
+            conn = createZKConnection(connectionString, zooKeeperRoot);
         }
     }
 
@@ -325,10 +328,14 @@ public class NodePool implements Describable<NodePool> {
         }
     }
 
+    public Boolean canProvision(Label label) {
+        Pattern p = Pattern.compile(MessageFormat.format("{0}\\w+$", getLabelPrefix()));
+        return p.matcher(label.getName()).matches();
+    }
+
     void provisionNode(Label label, Task task) throws Exception {
 
         // *** Request Node ***
-        //TODO: store prefix in config and pass in.
         NodeRequest request = new NodeRequest(this, task);
         requests.add(request);
 
@@ -434,10 +441,11 @@ public class NodePool implements Describable<NodePool> {
 
         public FormValidation doCheckLabelPrefix(@QueryParameter String labelPrefix) {
             LOG.log(Level.INFO, "doCheckLabelPrefix: {0}", labelPrefix);
-            if ("".equals(labelPrefix)) {
-                return FormValidation.error("label prefix must not be blank, that would cause this plugin to request a node for every label.");
-            } else {
+            if (labelPrefixPattern.matcher(labelPrefix).matches()) {
                 return FormValidation.ok();
+            } else {
+                return FormValidation.error("label prefix must be a word followed by a dash, for example: foo- regex \\w+- ");
+
             }
         }
 

@@ -9,7 +9,7 @@ import java.util.List;
  */
 public class NodePoolNode extends ZooKeeperObject {
 
-    private final KazooLock lock;
+    private transient final KazooLock lock;
     private transient NodePoolComputer computer;
 
     public NodePoolNode(NodePool nodePool, String id) throws Exception {
