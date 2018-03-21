@@ -1,19 +1,20 @@
 package com.rackspace.jenkins_nodepool;
 
 import hudson.Extension;
+import hudson.model.Computer;
 import hudson.model.Executor;
 import hudson.model.Node;
 import hudson.model.Run;
+import hudson.model.TaskListener;
 import hudson.model.labels.LabelAtom;
 import hudson.slaves.ComputerListener;
 import hudson.util.RunList;
-import jenkins.model.Jenkins;
-
-import javax.servlet.ServletException;
 import java.io.IOException;
 import java.util.List;
 import java.util.logging.Level;
 import java.util.logging.Logger;
+import javax.servlet.ServletException;
+import jenkins.model.Jenkins;
 
 @Extension
 public class JanitorialListener extends ComputerListener {
@@ -24,23 +25,35 @@ public class JanitorialListener extends ComputerListener {
     private static final Object lock = new Object();
 
     /**
-     * We don't really care about reacting to Computer related events, but the master computer
-     * coming online is a convenient place to get "start-time" behavior in a plugin.
+     * We don't really care about reacting to Computer related events, but the
+     * master computer coming online is a convenient place to get "start-time"
+     * behavior in a plugin.
      *
-     * Just fire the janitor thread to run in the background and reap orphaned NodePool nodes.
+     * Just fire the janitor thread to run in the background and reap orphaned
+     * NodePool nodes.
      */
-    public JanitorialListener() {
+    @Override
+    public void onOnline(Computer c, TaskListener listener) throws IOException, InterruptedException {
+        if (c.getNode() == Jenkins.getInstance().getNode("master")) {
+            startJanitor();
+        }
+
+    }
+
+    public void startJanitor() {
         LOGGER.log(Level.INFO, "Initializing janitor thread");
-        synchronized(lock) {
+        synchronized (lock) {
             if (janitorThread == null) {
-                janitorThread = new Thread(new Janitor());
+                janitorThread = new Thread(new Janitor(), "Nodepool Janitor Thread");
                 janitorThread.start();
             }
         }
     }
+
 }
 
 class Janitor implements Runnable {
+
     private static final Logger LOGGER = Logger.getLogger(JanitorialListener.class.getName());
     private static final String SLEEP_SECS_DEFAULT = "60";
 
@@ -61,8 +74,8 @@ class Janitor implements Runnable {
         while (true) {
             try {
                 clean();
-                Thread.currentThread().sleep(sleepMilliseconds);
-            } catch (Exception e) {
+                Thread.sleep(sleepMilliseconds);
+            } catch (InterruptedException e) {
                 LOGGER.log(Level.WARNING, "Cleanup failed: " + e.getMessage(), e);
             }
         }
@@ -73,10 +86,11 @@ class Janitor implements Runnable {
         final Jenkins jenkins = Jenkins.getInstance();
 
         for (Node node : jenkins.getNodes()) {
-            if (!(node instanceof NodePoolSlave))
+            if (!(node instanceof NodePoolSlave)) {
                 continue;
+            }
 
-            final NodePoolSlave nodePoolSlave = (NodePoolSlave)node;
+            final NodePoolSlave nodePoolSlave = (NodePoolSlave) node;
             LOGGER.log(Level.INFO, "NodePool Node: " + nodePoolSlave);
 
             // there are several scenarios where we want to scrub this node:
@@ -119,7 +133,7 @@ class Janitor implements Runnable {
     private boolean hasInvalidLabel(NodePoolSlave nodePoolSlave) {
         final String nodeLabel = nodePoolSlave.getLabelString();
         final List<NodePool> nodePools = NodePools.get().nodePoolsForLabel(new LabelAtom(nodeLabel));
-        return (nodePools == null || nodePools.size() == 0);
+        return (nodePools == null || nodePools.isEmpty());
     }
 
     private boolean isMissing(NodePoolSlave nodePoolSlave) {
@@ -144,13 +158,13 @@ class Janitor implements Runnable {
 
     private boolean isPreviouslyUsed(NodePoolSlave nodePoolSlave) {
 
-        final NodePoolComputer computer = (NodePoolComputer)nodePoolSlave.toComputer();
+        final NodePoolComputer computer = (NodePoolComputer) nodePoolSlave.toComputer();
         final RunList builds = computer.getBuilds();
         if (builds == null || builds.iterator().hasNext() == false) {
             // unused
             return false;
         }
-        final Run build = (Run)builds.iterator().next();
+        final Run build = (Run) builds.iterator().next();
         if (build.isBuilding()) {
             // a build is still in-progress
             return false;
