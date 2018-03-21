@@ -104,10 +104,7 @@ public class KazooLock {
             throws Exception{
         KazooLockWatcher klw = new KazooLockWatcher();
         while (nodePool.getConn().checkExists().usingWatcher(klw).forPath(path) != null) {
-            WatchedEvent we = (WatchedEvent)klw.poll(timeout, unit);
-            if (we == null){
-                throw new KazooLockException("Timeout Acquiring Lock for node: "+this.path);
-            }
+            klw.poll();
         }
     }
 
