@@ -28,7 +28,6 @@ import com.cloudbees.plugins.credentials.common.StandardUsernameCredentials;
 import com.cloudbees.plugins.credentials.common.StandardUsernameListBoxModel;
 import com.cloudbees.plugins.credentials.domains.DomainRequirement;
 import com.google.gson.Gson;
-import com.thoughtworks.xstream.annotations.XStreamOmitField;
 import com.trilead.ssh2.Connection;
 import hudson.Extension;
 import hudson.model.Computer;
@@ -72,6 +71,7 @@ import org.kohsuke.stapler.StaplerResponse;
 public class NodePool implements Describable<NodePool> {
 
     private static final Logger LOG = Logger.getLogger(NodePool.class.getName());
+
     static CuratorFramework createZKConnection(String connectionString,
             String zkRoot) {
         CuratorFramework conn = CuratorFrameworkFactory.builder()
@@ -83,26 +83,19 @@ public class NodePool implements Describable<NodePool> {
         return conn;
     }
     private final Charset charset = Charset.forName("UTF-8");
-    private List<NodePoolComputer> computers;
-    @XStreamOmitField
-    private CuratorFramework conn;
+    private transient List<NodePoolComputer> computers;
+    private transient CuratorFramework conn;
     private String connectionString;
     private String credentialsId;
-    @XStreamOmitField
-    private final Gson gson = new Gson();
+    private transient final Gson gson = new Gson();
     private String labelPrefix;
     private String nodeRoot;
     private String priority;
     private String requestRoot;
     private String requestor;
 
-    private List<NodeRequest> requests;
+    private transient List<NodeRequest> requests;
     private String zooKeeperRoot;
-
-    public NodePool() {
-        conn = NodePool.createZKConnection(connectionString, getZooKeeperRoot());
-        initTrackers();
-    }
 
     @DataBoundConstructor
     public NodePool(String connectionString,
@@ -117,8 +110,16 @@ public class NodePool implements Describable<NodePool> {
         this.labelPrefix = labelPrefix;
         this.zooKeeperRoot = zooKeeperRoot;
         this.nodeRoot = nodeRoot;
-        initTrackers();
+        initTransients();
     }
+
+    // Called for deserialisation
+    private void readObject(java.io.ObjectInputStream in)
+            throws IOException, ClassNotFoundException {
+        in.defaultReadObject(); // call default deserializer
+        initTransients();
+    }
+
     /**
      * Accept the node that was created to satisfy the given request.
      *
@@ -164,27 +165,29 @@ public class NodePool implements Describable<NodePool> {
 
         return acceptedNodes;
     }
+
     public Charset getCharset() {
         return charset;
     }
+
     public CuratorFramework getConn() {
-        if (conn == null) {
-            conn = NodePool.createZKConnection(connectionString, zooKeeperRoot);
-        }
         return conn;
     }
 
     public String getConnectionString() {
         return connectionString;
     }
+
     public String getCredentialsId() {
         return credentialsId;
     }
+
     @Override
     public Descriptor<NodePool> getDescriptor() {
         return new NodePoolDescriptor();
 
     }
+
     public Gson getGson() {
         return gson;
     }
@@ -192,9 +195,11 @@ public class NodePool implements Describable<NodePool> {
     public String getLabelPrefix() {
         return labelPrefix;
     }
+
     public String getNodeRoot() {
         return nodeRoot;
     }
+
     public List<NodePoolComputer> getNodes() {
         return computers;
     }
@@ -202,6 +207,7 @@ public class NodePool implements Describable<NodePool> {
     public String getPriority() {
         return priority;
     }
+
     public String getRequestRoot() {
         return requestRoot;
     }
@@ -209,9 +215,11 @@ public class NodePool implements Describable<NodePool> {
     public String getRequestor() {
         return requestor;
     }
+
     public List<NodeRequest> getRequests() {
         return requests;
     }
+
     /**
      * Get data for a node
      *
@@ -229,6 +237,7 @@ public class NodePool implements Describable<NodePool> {
     public final String getZooKeeperRoot() {
         return zooKeeperRoot;
     }
+
     //TODO: figure out how to reuse the form validation functions or dedupe this somehow.
     public final Boolean isConfigured() {
         if (connectionString == null || !connectionString.contains(":")) {
@@ -242,9 +251,11 @@ public class NodePool implements Describable<NodePool> {
         }
         return true;
     }
+
     public String nodePoolLabelFromJenkinsLabel(String jenkinsLabel) {
         return jenkinsLabel.substring(getLabelPrefix().length());
     }
+
     public void removeComputer(NodePoolComputer c) {
         computers.remove(c);
     }
@@ -292,12 +303,15 @@ public class NodePool implements Describable<NodePool> {
         this.zooKeeperRoot = zooKeeperRoot;
     }
 
-    private void initTrackers() {
+    private void initTransients() {
         if (requests == null) {
             requests = new ArrayList();
         }
         if (computers == null) {
-            this.computers = new ArrayList();
+            computers = new ArrayList();
+        }
+        if (conn == null) {
+            conn = createZKConnection(connectionString, nodeRoot);
         }
     }
 
@@ -387,7 +401,7 @@ public class NodePool implements Describable<NodePool> {
                 protected void check() throws IOException, ServletException {
                     try {
                         CuratorFramework testConn = NodePool.createZKConnection(connectionString, zooKeeperRoot);
-                        String node = testConn.create()
+                        testConn.create()
                                 .creatingParentsIfNeeded()
                                 .withMode(CreateMode.EPHEMERAL)
                                 .forPath(MessageFormat.format("/testing/{0}", req.getSession().getId()));

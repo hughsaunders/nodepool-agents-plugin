@@ -37,7 +37,7 @@ import java.util.ArrayList;
  */
 public class NodePoolSlave extends Slave {
 
-    private final NodePoolNode nodePoolNode;
+    private transient final NodePoolNode nodePoolNode;
 
     public NodePoolSlave(NodePoolNode nodePoolNode, String credentialsId) throws Descriptor.FormException, IOException {
 
